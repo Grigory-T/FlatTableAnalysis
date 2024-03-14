@@ -192,6 +192,8 @@ class FlatTableAnalysis:
         G_tr.add_edges_from((u, v, G.edges[u, v]) for u, v in G.edges)
         
         K = graphviz.Digraph(node_attr={'shape': 'box'})
+        for col in self.df:
+            K.node(self.wrap(col))
         for L, R, data in G.edges(data=True):
             K.edge(self.wrap(L), self.wrap(R), label=str(data['weight']))
         return K
