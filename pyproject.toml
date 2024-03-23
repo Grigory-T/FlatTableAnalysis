@@ -14,3 +14,12 @@ authors = [
     { name="Grigory T" }
 ]
 license = { file="LICENSE" }
+dependencies = [
+    "numpy",
+    "pandas",
+    "more-itertools",
+    "networkx",
+    "graphviz",
+    "python-igraph",
+    "tqdm"
+]
