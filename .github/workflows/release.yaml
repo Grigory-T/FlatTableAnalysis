@@ -1,0 +1,60 @@
+name: Release Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (in semantic versioning format, e.g., 1.2.3)'
+        required: true
+        default: '0.0.0'
+        type: string
+      draft:
+        description: 'Create a draft release'
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: 'Mark release as a prerelease'
+        required: false
+        default: false
+        type: boolean
+      releaseMessage:
+        description: 'Release Message'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+
+      - name: Fetch tags
+        run: git fetch --depth=1 --tags
+
+      - name: Create Git tag
+        run: git tag ${{ github.event.inputs.version }}
+
+      - name: Push Git tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push origin ${{ github.event.inputs.version }}
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          release_name: Release v${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.releaseMessage }}
+          draft: ${{ github.event.inputs.draft }}
+          prerelease: ${{ github.event.inputs.prerelease }}
