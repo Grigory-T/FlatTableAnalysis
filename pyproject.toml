@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "FlatTableAnalysis"
+name = "flattableanalysis"
 version = "0.0.0"
 description = "Architectural analysis of a flat table. Discovering data from technical point of view."
 authors = ["Grigory T"]
