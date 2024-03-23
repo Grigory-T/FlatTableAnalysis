@@ -1,0 +1,16 @@
+[build-system]
+requires = [
+    "setuptools>=40.6.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "FlatTableAnalysis"
+version = "0.0.0"
+description = "Architectural analysis of a flat table. Discovering data from technical point of view."
+readme = "README.md"
+authors = [
+    { name="Grigory T" }
+]
+license = { file="LICENSE" }
