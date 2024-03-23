@@ -13,20 +13,14 @@ from collections.abc import Iterable
 from collections import Counter
 from typing import Union, Optional
 from IPython.display import display
-import textwrap
 from tqdm.notebook import tqdm
+
+from .utils import wrap_text
 
 
 class FlatTableAnalysis:
     def __repr__(self) -> str:
         return f"FlatTableAnalysis instance\ndf.shape = {self.df.shape}"
-
-    @staticmethod
-    def wrap(string, max_width: int = 10) -> str:
-        r"""
-        used to draw node's label in graph. See self.show_fd_graph()
-        """
-        return "\n".join(textwrap.wrap(string, max_width))
 
     def __init__(
         self,
@@ -228,9 +222,9 @@ class FlatTableAnalysis:
 
         K = graphviz.Digraph(node_attr={"shape": "box"})
         for col in self.df:
-            K.node(self.wrap(col))
+            K.node(wrap_text(col))
         for L, R, data in G.edges(data=True):
-            K.edge(self.wrap(L), self.wrap(R), label=str(data["weight"]))
+            K.edge(wrap_text(L), wrap_text(R), label=str(data["weight"]))
         return K
 
     def get_density_table(self) -> pd.DataFrame:
