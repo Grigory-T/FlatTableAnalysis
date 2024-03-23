@@ -31,11 +31,14 @@ class FlatTableAnalysis:
         modify df to internal representation (factorize, unify nan, ...)
         convert dtypes for speedup
         """
-        assert isinstance(
-            df.columns, pd.core.indexes.base.Index
-        ), "header has more than one line"
-        assert df.columns.is_unique, "header is not unique"
-        assert not any(df.columns.isna()), "header has nan value"
+        if not isinstance(df.columns, pd.core.indexes.base.Index):
+            raise ValueError("DataFrame header has more than one line")
+
+        if not df.columns.is_unique:
+            raise ValueError("DataFrame columns must be unique")
+
+        if any(df.columns.isna()):
+            raise ValueError("DataFrame columns must not contain NaN values")
 
         self.df = (
             df.copy()
@@ -142,8 +145,10 @@ class FlatTableAnalysis:
         """
         col_nums = col_nums or 1
         col_nums = list(col_nums) if isinstance(col_nums, Iterable) else [col_nums]
-        assert max(col_nums) <= self.df.shape[1], "cols number bigger then table header"
-        assert min(col_nums) > 0, "cols number cannot be zero"
+        if max(col_nums) > self.df.shape[1]:
+            raise ValueError("Maximum number of columns specified is larger than the number of DataFrame columns")
+        if min(col_nums) <= 0:
+            raise ValueError("Minimum number of columns must be greater than 0")
 
         pbar = tqdm(
             total=sum(math.comb(self.df.shape[1], col_num) for col_num in col_nums)
@@ -185,7 +190,8 @@ class FlatTableAnalysis:
         fds may be not strict (threshold level)
         for better visualization we remove transitive dependancies
         """
-        assert 0 < threshold <= 1, "threshold should be in left open interval (0, 1]"
+        if not (0 < threshold <= 1):
+            raise ValueError("Threshold should be in the left-open interval (0, 1]")
 
         table = []
         for cols in it.combinations(self.df, r=2):
@@ -387,8 +393,10 @@ class FlatTableAnalysis:
         target = (str(target),) if isinstance(target, (int, str)) else tuple(target)
 
         col_nums = [col_nums] if isinstance(col_nums, int) else list(col_nums)
-        assert max(col_nums) <= self.df.shape[1] - len(target)
-        assert min(col_nums) >= 1
+        if max(col_nums) > self.df.shape[1] - len(target):
+            raise ValueError("Maximum number of columns specified is larger than the number of available DataFrame columns")
+        if min(col_nums) <= 0:
+            raise ValueError("Minimum number of columns must be greater than 0")
 
         other_cols = list(self.df.columns.difference(target))
 
