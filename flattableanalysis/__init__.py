@@ -1,0 +1,1 @@
+from .flat_table_analysis import FlatTableAnalysis
