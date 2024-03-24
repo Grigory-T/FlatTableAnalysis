@@ -46,7 +46,7 @@ jobs:
           python -c "\
           import toml; \
           pyproject = toml.load('pyproject.toml'); \
-          pyproject['project']['version'] = '${{ steps.latest_tag.outputs.tag }}'; \
+          pyproject['tool']['poetry']['version'] = '${{ steps.latest_tag.outputs.tag }}'; \
           toml.dump(pyproject, open('pyproject.toml', 'w'))"
 
       - name: Build and publish
