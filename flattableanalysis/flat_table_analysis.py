@@ -162,7 +162,7 @@ class FlatTableAnalysis:
         for col_num in col_nums:
             for col_names in it.combinations(self.df, r=col_num):
                 result.append(
-                    tuple(col_names, self.df.loc[:, col_names].drop_duplicates().shape[0])
+                    (col_names, self.df.loc[:, col_names].drop_duplicates().shape[0])
                 )
                 pbar.update(1)
         pbar.close()
@@ -184,15 +184,15 @@ class FlatTableAnalysis:
                 .assign(total_rows=self.df.shape[0])
                 .assign(uniques_frac=lambda df: df["uniques"] / df["total_rows"])
                 .assign(col_names_pos = lambda df: 
-                        df['col_names'].map(lambda el: list(map(self.col_pos, el)))  # for sorting only
+                        df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
                         )
                 .sort_values(["uniques_frac", "col_names_len", 'col_names_pos'], ascending=[False, True, True])
                 .drop('col_names_pos', axis=1)
                 .reset_index(drop=True)
             )
         
-        else:
-            potential_keys = [set(el[0]) for el in result if el[1] == 1]
+        elif strict:
+            potential_keys = [set(el[0]) for el in result if el[1] == self.df.shape[0]]
             candidate_keys = []
             for potential_key in potential_keys:
                 flag = True
@@ -201,8 +201,9 @@ class FlatTableAnalysis:
                         flag = False
                         break
                 if flag:
-                    candidate_keys.append([potential_key])  # wrap in list -> one column in df
+                    candidate_keys.append(potential_key)
             
+            candidate_keys = [[el] for el in candidate_keys]  # nested list -> resulting in one column in df
             return  (
                 pd.DataFrame(candidate_keys, columns=["col_names"])
                 .pipe(
@@ -214,7 +215,7 @@ class FlatTableAnalysis:
                 )
                 .assign(col_names_len = lambda df: df['col_names'].str.len())
                 .assign(col_names_pos = lambda df: 
-                        df['col_names'].map(lambda el: list(map(self.col_pos, el)))  # for sorting only
+                        df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
                         )
                 .sort_values(["col_names_len", 'col_names_pos'], ascending=[True, True])
                 .drop('col_names_pos', axis=1)
