@@ -25,6 +25,9 @@ class FlatTableAnalysis:
     def __init__(
         self,
         df: pd.DataFrame,
+        remove_constant_columns: bool=True,
+        remove_all_unique_columns: bool=True,
+        remove_one_one_relations: bool=True,
     ) -> None:
         r"""
         check df for basic validity
@@ -41,44 +44,46 @@ class FlatTableAnalysis:
             raise ValueError("DataFrame columns must not contain NaN values")
 
         self.df = (
-            df.copy()
-            .replace(["None", "none", "nan", ""], [np.nan] * 4)
-            .fillna(np.nan)
-            .rename(str, axis=1)
-            .reset_index(drop=True)
+                    df.copy()
+                    .replace(["None", "none", "nan", ""], [np.nan] * 4)
+                    .fillna(np.nan)
+                    .rename(str, axis=1)
+                    .reset_index(drop=True)
         )
+
         # utils mappings
         self.col_pos = {col: pos for pos, col in enumerate(self.df)}.get
         self.col_to_unique = {
             col: self.df.loc[:, col].drop_duplicates().shape[0] for col in self.df
         }.get
 
-        # delete columns
-        to_delete = list(self.df.columns[self.df.columns.map(self.col_to_unique) == 1])
-        print("remove constants columns: ", to_delete)
-        self.df = self.df.loc[:, lambda df: df.columns.difference(to_delete)]
-
-        to_delete = list(
-            self.df.columns[self.df.columns.map(self.col_to_unique) == df.shape[0]]
-        )
-        print("remove all unique columns: ", to_delete)
-        self.df = self.df.loc[:, lambda df: df.columns.difference(to_delete)]
-
-        self.df = self._delete_one_one_relations(self.df)
+        # remove columns
+        if remove_constant_columns:
+            to_delete = list(self.df.columns[self.df.columns.map(self.col_to_unique) == 1])
+            self.df = self.df.loc[:, lambda df: df.columns.difference(to_delete)]
+            print("remove_constant_columns: ", to_delete)
+        if remove_all_unique_columns:
+            to_delete = list(self.df.columns[self.df.columns.map(self.col_to_unique) == df.shape[0]])
+            self.df = self.df.loc[:, lambda df: df.columns.difference(to_delete)]
+            print("remove_all_unique_columns: ", to_delete)
+        if remove_one_one_relations:
+            self.df = self._delete_one_one_relations(self.df)
 
         self._df = (
             self.df
         )  # save df version without factorize, need for self.show_header_info()
+
+        # final processing
         self.df = (
-            self.df.drop_duplicates()
-            .apply(lambda ser: ser.factorize()[0])
-            .pipe(lambda obj: obj if isinstance(obj, pd.DataFrame) else obj.to_frame())
-            .assign(
-                **{
-                    col: lambda df, col=col: df[col].astype("category")
-                    for col in self.df
-                }
-            )
+                    self.df.drop_duplicates()
+                    .apply(lambda ser: ser.factorize()[0])
+                    .pipe(lambda obj: obj if isinstance(obj, pd.DataFrame) else obj.to_frame())
+                    .assign(
+                                **{
+                                    col: lambda df, col=col: df[col].astype("category")
+                                    for col in self.df
+                                }
+                    )
         )
 
     def _delete_one_one_relations(
@@ -102,12 +107,12 @@ class FlatTableAnalysis:
         # if e.g. 4 cols have one-to-one relations between them -> need do delete all but one from them
         G = nx.Graph()
         G.add_edges_from(edge_list)
-        to_delete = [
-            sorted(cc, key=self.col_pos)[1:] for cc in nx.connected_components(G)
-        ]
+        ccs = [sorted(cc, key=self.col_pos) for cc in nx.connected_components(G)]
+        to_delete = [cc[:1] for cc in ccs]
         to_delete = list(it.chain.from_iterable(to_delete))
         if to_delete:
-            print("deleted one-one relations", to_delete)
+            print("remove_one_one_relations: ", to_delete)
+            print("found these sets of one-one relations, keep only 1st item from each: ", ccs)
             return df.drop(to_delete, axis=1)
         else:
             return df
@@ -137,13 +142,13 @@ class FlatTableAnalysis:
 
     def get_candidate_keys(
         self,
-        col_nums: Optional[Union[int, Iterable[int]]] = None,
+        col_nums: Optional[Union[int, Iterable[int]]] = 1,
+        strict: bool=False
     ) -> pd.DataFrame:
         r"""
         calculate cardinality for all sets of cols with given lengths
         sort them to show bigger cardinality and smaller sets of cols
         """
-        col_nums = col_nums or 1
         col_nums = list(col_nums) if isinstance(col_nums, Iterable) else [col_nums]
         if max(col_nums) > self.df.shape[1]:
             raise ValueError("Maximum number of columns specified is larger than the number of DataFrame columns")
@@ -157,29 +162,64 @@ class FlatTableAnalysis:
         for col_num in col_nums:
             for col_names in it.combinations(self.df, r=col_num):
                 result.append(
-                    [col_names, self.df.loc[:, col_names].drop_duplicates().shape[0]]
+                    tuple(col_names, self.df.loc[:, col_names].drop_duplicates().shape[0])
                 )
                 pbar.update(1)
         pbar.close()
 
-        return (
-            pd.DataFrame(result, columns=["col_names", "uniques"])
-            .assign(total_rows=self.df.shape[0])
-            .assign(uniques_frac=lambda df: df["uniques"] / df["total_rows"])
-            .pipe(
-                lambda df: df.insert(1, "col_names_len", df["col_names"].str.len())
-                or df
-            )
-            .sort_values(["uniques_frac", "col_names_len"], ascending=[False, True])
-            .reset_index(drop=True)
-            .pipe(
-                lambda df: df.assign(
-                    col_names=lambda df: df["col_names"].map(
-                        lambda el: tuple(sorted(el, key=self.col_pos))
+        if not strict:
+            return  (
+                pd.DataFrame(result, columns=["col_names", "uniques"])
+                .pipe(
+                    lambda df: df.insert(1, "col_names_len", df["col_names"].str.len())
+                    or df
+                )
+                .pipe(
+                    lambda df: df.assign(
+                        col_names=lambda df: df["col_names"].map(
+                            lambda el: tuple(sorted(el, key=self.col_pos))
+                        )
                     )
                 )
+                .assign(total_rows=self.df.shape[0])
+                .assign(uniques_frac=lambda df: df["uniques"] / df["total_rows"])
+                .assign(col_names_pos = lambda df: 
+                        df['col_names'].map(lambda el: list(map(self.col_pos, el)))  # for sorting only
+                        )
+                .sort_values(["uniques_frac", "col_names_len", 'col_names_pos'], ascending=[False, True, True])
+                .drop('col_names_pos', axis=1)
+                .reset_index(drop=True)
             )
-        )
+        
+        else:
+            potential_keys = [set(el[0]) for el in result if el[1] == 1]
+            candidate_keys = []
+            for potential_key in potential_keys:
+                flag = True
+                for candidate_key in candidate_keys:
+                    if candidate_key.issubset(potential_key):
+                        flag = False
+                        break
+                if flag:
+                    candidate_keys.append([potential_key])  # wrap in list -> one column in df
+            
+            return  (
+                pd.DataFrame(candidate_keys, columns=["col_names"])
+                .pipe(
+                        lambda df: df.assign(
+                            col_names=lambda df: df["col_names"].map(
+                                lambda el: tuple(sorted(el, key=self.col_pos))
+                        )
+                    )
+                )
+                .assign(col_names_len = lambda df: df['col_names'].str.len())
+                .assign(col_names_pos = lambda df: 
+                        df['col_names'].map(lambda el: list(map(self.col_pos, el)))  # for sorting only
+                        )
+                .sort_values(["col_names_len", 'col_names_pos'], ascending=[True, True])
+                .drop('col_names_pos', axis=1)
+                .reset_index(drop=True)
+            )
 
     def show_fd_graph(
         self,
