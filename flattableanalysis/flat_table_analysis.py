@@ -136,7 +136,7 @@ class FlatTableAnalysis:
                 f"{self.col_to_unique(col):<15_}",
                 f"{sum(self._df[col].isna()):<15_}",
                 f"{str(self._df[col].dtype):<15}",
-                f"{str(list(self._df[col].unique()[:5])):<15}"[:70],
+                f"{str(list(self._df[col].dropna().unique()[:5])):<15}"[:70],
             )
         print(f"total rows: {self.df.shape[0]:_}")
 
