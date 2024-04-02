@@ -108,11 +108,11 @@ class FlatTableAnalysis:
         G = nx.Graph()
         G.add_edges_from(edge_list)
         ccs = [sorted(cc, key=self.col_pos) for cc in nx.connected_components(G)]
-        to_delete = [cc[:1] for cc in ccs]
+        to_delete = [cc[1:] for cc in ccs]
         to_delete = list(it.chain.from_iterable(to_delete))
         if to_delete:
             print("remove_one_one_relations: ", to_delete)
-            print("found these sets of one-one relations, keep only 1st item from each: ", ccs)
+            print("    found these sets of one-one relations, keep only 1st item from each: ", ccs)
             return df.drop(to_delete, axis=1)
         else:
             return df
