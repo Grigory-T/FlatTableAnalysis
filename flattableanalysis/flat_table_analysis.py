@@ -117,13 +117,13 @@ class FlatTableAnalysis:
         else:
             return df
 
-    def show_header_info(self) -> None:
+    def show_header_info(self, col_name_len=35) -> None:
         r"""
         print header and relevant info about each columns. useful for analysis overview
         """
         print(
             f'{"idx":<5}',
-            f'{"col name":<15}',
+            f'{"col name":<{col_name_len}}',
             f'{"unique count":<15}',
             f'{"nan count":<15}',
             f'{"dtype":<15}',
@@ -132,11 +132,11 @@ class FlatTableAnalysis:
         for idx, col in enumerate(self.df):
             print(
                 f"{idx:<5}",
-                f"{col:<20}"[:18],
+                f"{col[:(col_name_len-2)]:<{col_name_len}}",
                 f"{self.col_to_unique(col):<15_}",
                 f"{sum(self._df[col].isna()):<15_}",
                 f"{str(self._df[col].dtype):<15}",
-                f"{str(list(self._df[col].unique()[:5])):<15}"[:50],
+                f"{str(list(self._df[col].unique()[:5])):<15}"[:70],
             )
         print(f"total rows: {self.df.shape[0]:_}")
 
@@ -268,12 +268,31 @@ class FlatTableAnalysis:
         G_tr.add_nodes_from(G.nodes(data=True))
         G_tr.add_edges_from((u, v, G.edges[u, v]) for u, v in G_tr.edges)
 
-        K = graphviz.Digraph(node_attr={"shape": "box"})
+        K = graphviz.Digraph()
+        K.attr(
+                nodesep='.3', 
+                ranksep='.3', 
+                # size='8.5', 
+                # ration='1',
+                rankdir='TB', 
+                # ordering='out', 
+                # splines='polyline', 
+                bgcolor='antiquewhite', 
+                fontsize='10',
+                )
+        K.attr('node', 
+               shape='box', 
+               style='filled', 
+               color='lightblue2', 
+            #    fontname='Helvetica',
+               )
+        # g.attr('edge', fontname='Helvetica')
+
         for col in self.df:
             K.node(wrap_text(col))
         for L, R, data in G_tr.edges(data=True):
             K.edge(wrap_text(L), wrap_text(R), label=str(data["weight"]))
-        return K
+        return K.unflatten(stagger=3, fanout=True, chain=5)
 
     def get_density_table(self) -> pd.DataFrame:
         r"""
