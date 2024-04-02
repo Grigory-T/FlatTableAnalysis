@@ -264,13 +264,14 @@ class FlatTableAnalysis:
             print(f"simple cylces removed {len(edges_to_remove)}")
             G = H.to_networkx()
         G_tr = nx.transitive_reduction(G)
+        # need to copy data for nodes and edges manually
         G_tr.add_nodes_from(G.nodes(data=True))
-        G_tr.add_edges_from((u, v, G.edges[u, v]) for u, v in G.edges)
+        G_tr.add_edges_from((u, v, G.edges[u, v]) for u, v in G_tr.edges)
 
         K = graphviz.Digraph(node_attr={"shape": "box"})
         for col in self.df:
             K.node(wrap_text(col))
-        for L, R, data in G.edges(data=True):
+        for L, R, data in G_tr.edges(data=True):
             K.edge(wrap_text(L), wrap_text(R), label=str(data["weight"]))
         return K
 
