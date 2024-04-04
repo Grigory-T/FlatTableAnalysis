@@ -11,7 +11,7 @@ import igraph as ig
 import math
 from collections.abc import Iterable
 from collections import Counter
-from typing import Union, Optional
+from typing import Union, Optional, Tuple, List
 from IPython.display import display
 from tqdm.notebook import tqdm
 
@@ -44,7 +44,7 @@ class FlatTableAnalysis:
             raise ValueError("DataFrame columns must not contain NaN values")
 
         self.df = (
-                    df.copy()
+                    df
                     .replace(["None", "none", "nan", ""], [np.nan] * 4)
                     .fillna(np.nan)
                     .rename(str, axis=1)
@@ -69,14 +69,12 @@ class FlatTableAnalysis:
         if remove_one_one_relations:
             self.df = self._delete_one_one_relations(self.df)
 
-        self._df = (
-            self.df
-        )  # save df version without factorize, need for self.show_header_info()
-
+        self._make_header_info()  # store info befor factorize erase it
+        
         # final processing
         self.df = (
                     self.df.drop_duplicates()
-                    .apply(lambda ser: ser.factorize()[0])
+                    .apply(lambda ser: ser.factorize()[0])  # sentinel -1 will be used for NaN values
                     .pipe(lambda obj: obj if isinstance(obj, pd.DataFrame) else obj.to_frame())
                     .assign(
                                 **{
@@ -117,110 +115,91 @@ class FlatTableAnalysis:
         else:
             return df
 
-    def show_header_info(self, col_name_len=35) -> None:
+    def _make_header_info(self) -> None:
+        r"""
+        prepare header info and store it on instance variable
+        """
+        col_name_width = min(max(len(c) for c in self.df) + 5, 35)
+        self.header_info = {}
+        d = {}
+        d['idx'] = 'idx'.ljust(5)
+        d['col name'] = 'col name'.ljust(col_name_width)
+        d['unique count'] = 'unique count'.ljust(15)
+        d['nan count'] = 'nan count'.ljust(15)
+        d['dtype'] = 'dtype'.ljust(15)
+        d['examples'] = 'examples'.ljust(15)
+        self.header_info['header'] = d   
+        for idx, col in enumerate(self.df):
+            d = {}
+            d['idx'] = f'{idx:<5}'
+            d['col name'] = col.ljust(col_name_width)
+            d['unique count'] = f'{self.col_to_unique(col):<15_}'
+            d['nan count'] = f'{sum(self.df[col].isna()):<15_}'
+            d['dtype'] = str(self.df[col].dtype).ljust(15)
+            d['examples'] = str(list(self.df[col].dropna().unique()[:5]))[:70]
+            self.header_info[col] = d
+
+    def show_header_info(self) -> None:
         r"""
         print header and relevant info about each columns. useful for analysis overview
         """
-        print(
-            f'{"idx":<5}',
-            f'{"col name":<{col_name_len}}',
-            f'{"unique count":<15}',
-            f'{"nan count":<15}',
-            f'{"dtype":<15}',
-            f'{"examples":<15}',
-        )
-        for idx, col in enumerate(self.df):
+        for _, header_info in self.header_info.items():
             print(
-                f"{idx:<5}",
-                f"{col[:(col_name_len-2)]:<{col_name_len}}",
-                f"{self.col_to_unique(col):<15_}",
-                f"{sum(self._df[col].isna()):<15_}",
-                f"{str(self._df[col].dtype):<15}",
-                f"{str(list(self._df[col].dropna().unique()[:5])):<15}"[:70],
+                header_info['idx'],
+                header_info['col name'],
+                header_info['unique count'],
+                header_info['nan count'],
+                header_info['dtype'],
+                header_info['examples'],
             )
         print(f"total rows: {self.df.shape[0]:_}")
 
     def get_candidate_keys(
         self,
-        col_nums: Optional[Union[int, Iterable[int]]] = 1,
-        strict: bool=False
+        col_nums: int = 1,
     ) -> pd.DataFrame:
         r"""
         calculate cardinality for all sets of cols with given lengths
         sort them to show bigger cardinality and smaller sets of cols
         """
-        col_nums = list(col_nums) if isinstance(col_nums, Iterable) else [col_nums]
-        if max(col_nums) > self.df.shape[1]:
-            raise ValueError("Maximum number of columns specified is larger than the number of DataFrame columns")
-        if min(col_nums) <= 0:
-            raise ValueError("Minimum number of columns must be greater than 0")
+        if col_nums > self.df.shape[1]:
+            raise ValueError("number of columns specified is larger than the number of DataFrame columns")
+        if col_nums <= 0:
+            raise ValueError("number of columns must be greater than 0")
 
-        pbar = tqdm(
-            total=sum(math.comb(self.df.shape[1], col_num) for col_num in col_nums)
-        )
-        result = []
-        for col_num in col_nums:
+        pbar = tqdm(total=sum(math.comb(self.df.shape[1], col_num) for col_num in range(1, col_nums+1)))
+        candidates = []
+        for col_num in range(1, col_nums + 1):
             for col_names in it.combinations(self.df, r=col_num):
-                result.append(
-                    (col_names, self.df.loc[:, col_names].drop_duplicates().shape[0])
-                )
+                unique_n = sum(~self.df.duplicated(subset=col_names))
+                col_names_set = set(col_names)
+
+                flag = True
+                for candidate in candidates:
+                    if col_names_set > candidate[0] and unique_n <= candidate[1]:
+                        flag = False
+                        break
+
+                if flag:
+                    candidates.append((col_names_set, unique_n))
                 pbar.update(1)
         pbar.close()
 
-        if not strict:
-            return  (
-                pd.DataFrame(result, columns=["col_names", "uniques"])
-                .pipe(
-                    lambda df: df.insert(1, "col_names_len", df["col_names"].str.len())
-                    or df
-                )
-                .pipe(
-                    lambda df: df.assign(
-                        col_names=lambda df: df["col_names"].map(
-                            lambda el: tuple(sorted(el, key=self.col_pos))
-                        )
+        return (
+            pd.DataFrame(candidates, columns=["col_names", "uniques"])
+            .assign(col_names = lambda df: df["col_names"].map(
+                        lambda el: tuple(sorted(el, key=self.col_pos))))
+            .assign(total_rows=self.df.shape[0])
+            .assign(col_names_len = lambda df: df["col_names"].str.len())
+            .assign(uniques_frac=lambda df: df["uniques"] / df["total_rows"])
+            .assign(col_names_pos = lambda df: 
+                    df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
                     )
-                )
-                .assign(total_rows=self.df.shape[0])
-                .assign(uniques_frac=lambda df: df["uniques"] / df["total_rows"])
-                .assign(col_names_pos = lambda df: 
-                        df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
-                        )
-                .sort_values(["uniques_frac", "col_names_len", 'col_names_pos'], ascending=[False, True, True])
-                .drop('col_names_pos', axis=1)
-                .reset_index(drop=True)
-            )
-        
-        elif strict:
-            potential_keys = [set(el[0]) for el in result if el[1] == self.df.shape[0]]
-            candidate_keys = []
-            for potential_key in potential_keys:
-                flag = True
-                for candidate_key in candidate_keys:
-                    if candidate_key.issubset(potential_key):
-                        flag = False
-                        break
-                if flag:
-                    candidate_keys.append(potential_key)
-            
-            candidate_keys = [[el] for el in candidate_keys]  # nested list -> resulting in one column in df
-            return  (
-                pd.DataFrame(candidate_keys, columns=["col_names"])
-                .pipe(
-                        lambda df: df.assign(
-                            col_names=lambda df: df["col_names"].map(
-                                lambda el: tuple(sorted(el, key=self.col_pos))
-                        )
-                    )
-                )
-                .assign(col_names_len = lambda df: df['col_names'].str.len())
-                .assign(col_names_pos = lambda df: 
-                        df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
-                        )
-                .sort_values(["col_names_len", 'col_names_pos'], ascending=[True, True])
-                .drop('col_names_pos', axis=1)
-                .reset_index(drop=True)
-            )
+            .sort_values(["uniques_frac", "col_names_len", 'col_names_pos'], ascending=[False, True, True])
+            .drop('col_names_pos', axis=1)
+            .reset_index(drop=True)
+            .loc[:, ['col_names', 'col_names_len', 'uniques', 'total_rows', 'uniques_frac']]
+        )
 
     def show_fd_graph(
         self,
@@ -229,7 +208,6 @@ class FlatTableAnalysis:
         r"""
         draw graph with functional dependancies (fds) as edges (between each pair of columns)
         fds may be not strict (threshold level)
-        for better visualization we remove transitive dependancies
         """
         if not (0 < threshold <= 1):
             raise ValueError("Threshold should be in the left-open interval (0, 1]")
@@ -257,6 +235,7 @@ class FlatTableAnalysis:
 
         G = nx.DiGraph()
         G.add_edges_from(edge_list)
+
         if mit.first(nx.simple_cycles(G), False):  # if at leaste one cycle exists
             H = ig.Graph.from_networkx(G)
             edges_to_remove = H.feedback_arc_set()
@@ -287,7 +266,6 @@ class FlatTableAnalysis:
             #    fontname='Helvetica',
                )
         # g.attr('edge', fontname='Helvetica')
-
         for col in self.df:
             K.node(wrap_text(col))
         for L, R, data in G_tr.edges(data=True):
@@ -323,6 +301,7 @@ class FlatTableAnalysis:
         self,
         L: Optional[Union[str, Iterable[str]]] = None,
         R: Optional[Union[str, Iterable[str]]] = None,
+        level: int=1,
     ) -> None:
         r"""
         deep analysis of pair
@@ -335,13 +314,26 @@ class FlatTableAnalysis:
         R = R or self.df.columns[1]
         L = [L] if isinstance(L, str) else list(L)
         R = [R] if isinstance(R, str) else list(R)
-
-        L_n, R_n = len(L), len(R)
+        
+        subdf = self.df.loc[:, L + R].drop_duplicates()
+        total = subdf.shape[0]
+        L_one_nodes = sum(~subdf.loc[:, L].duplicated(keep=False))
+        R_one_nodes = sum(~subdf.loc[:, R].duplicated(keep=False))
+        L_nodes = sum(~subdf.loc[:, L].duplicated(keep='first'))
+        R_nodes = sum(~subdf.loc[:, R].duplicated(keep='first'))
+        LR_frac_edges = L_one_nodes / total
+        RL_frac_edges = R_one_nodes / total
+        LR_frac_nodes = L_one_nodes / L_nodes
+        RL_frac_nodes = R_one_nodes / R_nodes
+        print(f'left unique {L_nodes:_}, right unique {R_nodes:_}, edges {total:_} ({total / (L_nodes * R_nodes):.5f}%)')
+        print(f'nodes: left fd -> {LR_frac_nodes:.5f}, right fd -> {RL_frac_nodes:.5f}')
+        print(f'edges: left fd -> {LR_frac_edges:.5f}, right fd -> {RL_frac_edges:.5f}')
+        if level == 1: return
 
         G = nx.Graph()
-        L = self.df.loc[:, L].values.tolist()
-        R = self.df.loc[:, R].values.tolist()
-        for L_tup, R_tup in zip(L, R):
+        L_list = self.df.loc[:, L].values.tolist()
+        R_list = self.df.loc[:, R].values.tolist()
+        for L_tup, R_tup in zip(L_list, R_list):
             L_tup = (0,) + tuple(L_tup)
             R_tup = (1,) + tuple(R_tup)
             G.add_edge(L_tup, R_tup)
@@ -362,7 +354,9 @@ class FlatTableAnalysis:
             elif L_count == 1 and R_count == 1:
                 CC_type["one_one"] += 1
 
-        result = pd.Series(CC_type).reset_index().set_axis(["CC_type", "count"], axis=1)
+        result = pd.Series(CC_type).reset_index().set_axis(["CC_type", "count"], axis=1).sort_values('CC_type')
+        display(result)
+        if level == 2: return
 
         CC_all = (
             sorted(CC_all, key=lambda el: el[0], reverse=True)[:20]
@@ -373,7 +367,7 @@ class FlatTableAnalysis:
 
         zero_symbol = -1
         try:
-            L_nan_cc = nx.node_connected_component(G, tuple([0] + [zero_symbol] * L_n))
+            L_nan_cc = nx.node_connected_component(G, tuple([0] + [zero_symbol] * len(L)))
         except KeyError:
             L_nan_cc = []
         cc_flag = [node[0] for node in L_nan_cc]
@@ -381,14 +375,13 @@ class FlatTableAnalysis:
         L_nan_R_count = cc_flag.count(1)
 
         try:
-            R_nan_cc = nx.node_connected_component(G, tuple([1] + [zero_symbol] * R_n))
+            R_nan_cc = nx.node_connected_component(G, tuple([1] + [zero_symbol] * len(R)))
         except KeyError:
             R_nan_cc = []
         cc_flag = [node[0] for node in R_nan_cc]
         R_nan_L_count = cc_flag.count(0)
         R_nan_R_count = cc_flag.count(1)
 
-        display(result)
         print("_" * 50)
         display(CC_all)
         print("_" * 50)
@@ -401,6 +394,27 @@ class FlatTableAnalysis:
                 L_nan_cc == R_nan_cc,
             )
         )
+        if level == 3: return
+
+    def fds(
+        self,
+        data: Iterable[Iterable[Iterable[str]]]
+    ) -> List[Tuple[bool, bool]]:
+        """
+        take list of pairs. Each pair include left columns set and right columns set
+        determine if fd exists (left->right and right->left)
+        method is intended for fast functional dependancy calculations
+        """
+        rv = []
+        for L, R in tqdm(data):
+            subdf = self.df.loc[:, L+R].drop_duplicates()
+            rv.append(
+                        (
+                        any(subdf.loc[:, L].duplicated()),
+                        any(subdf.loc[:, R].duplicated()),
+                        )
+                      )
+        return rv
 
     def show_opposite_count(
         self,
@@ -442,7 +456,7 @@ class FlatTableAnalysis:
     def get_cols_determinants(
         self,
         target: Optional[Union[str, Iterable[str]]] = None,
-        col_nums: Optional[Union[int, Iterable[int]]] = 1,
+        max_cols: int = 1,
     ) -> pd.DataFrame:
         r"""
         deep analysis of possible determinants of the object
@@ -453,29 +467,44 @@ class FlatTableAnalysis:
         target = target or [self.df.columns[0]]
         target = (str(target),) if isinstance(target, (int, str)) else tuple(target)
 
-        col_nums = [col_nums] if isinstance(col_nums, int) else list(col_nums)
-        if max(col_nums) > self.df.shape[1] - len(target):
+        if  max_cols + len(target) > self.df.shape[1]:
             raise ValueError("Maximum number of columns specified is larger than the number of available DataFrame columns")
-        if min(col_nums) <= 0:
+        if max_cols <= 0:
             raise ValueError("Minimum number of columns must be greater than 0")
 
         other_cols = list(self.df.columns.difference(target))
 
-        pbar = tqdm(
-            total=sum(math.comb(len(other_cols), col_num) for col_num in col_nums)
-        )
-        result = []
-        for col_num in col_nums:
+        pbar = tqdm(total=sum(math.comb(len(other_cols), col_num) for col_num in range(1, max_cols + 1)))
+        total = self.df.shape[0]
+        determinants = []
+        for col_num in range(1, max_cols + 1):
             for source in it.combinations(other_cols, r=col_num):
-                sub_df = self.df.loc[:, source + target].drop_duplicates()
-                LR_unique = sub_df.loc[:, source + target].drop_duplicates().shape[0]
-                L_unique = sub_df.loc[:, source].drop_duplicates().shape[0]
-                result.append((source, L_unique / LR_unique))
+                subdf = self.df.loc[:, source + target].drop_duplicates()
+                dups_n = sum(~subdf.loc[:, source].duplicated(keep=False))
+                frac = dups_n / total
+                source_set = set(source)
+
+                flag = True
+                for determinant in determinants:
+                    if source_set > determinant[0] and frac <= determinant[1]:
+                        flag = False
+                        break
+
+                if flag:
+                    determinants.append((source_set, frac))
                 pbar.update(1)
-        pbar.close
+        pbar.close()
 
         return (
-            pd.DataFrame(result, columns=["cols", "ratio"])
-            .sort_values("ratio", ascending=False)
-            .reset_index(drop=True)
+                pd.DataFrame(determinants, columns=["col_names", "frac"])
+                .assign(col_names = lambda df: df["col_names"].map(
+                                lambda el: tuple(sorted(el, key=self.col_pos))))
+                .assign(col_names_len = lambda df: df['col_names'].str.len())
+                .loc[:, ['col_names', 'col_names_len', 'frac']]
+                .assign(col_names_pos = lambda df: 
+                        df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
+                        )
+                .sort_values(["frac", 'col_names_len', 'col_names_pos'], ascending=[False, True, True])
+                .drop('col_names_pos', axis=1)
+                .reset_index(drop=True)
         )
