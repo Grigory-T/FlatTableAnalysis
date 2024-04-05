@@ -132,7 +132,7 @@ class FlatTableAnalysis:
         for idx, col in enumerate(self.df):
             d = {}
             d['idx'] = f'{idx:<5}'
-            d['col name'] = col.ljust(col_name_width)
+            d['col name'] = col[:col_name_width-3].ljust(col_name_width)
             d['unique count'] = f'{self.col_to_unique(col):<15_}'
             d['nan count'] = f'{sum(self.df[col].isna()):<15_}'
             d['dtype'] = str(self.df[col].dtype).ljust(15)
@@ -235,17 +235,12 @@ class FlatTableAnalysis:
 
         G = nx.DiGraph()
         G.add_edges_from(edge_list)
-
-        if mit.first(nx.simple_cycles(G), False):  # if at leaste one cycle exists
-            H = ig.Graph.from_networkx(G)
-            edges_to_remove = H.feedback_arc_set()
-            H.delete_edges(edges_to_remove)
-            print(f"simple cylces removed {len(edges_to_remove)}")
-            G = H.to_networkx()
-        G_tr = nx.transitive_reduction(G)
-        # need to copy data for nodes and edges manually
-        G_tr.add_nodes_from(G.nodes(data=True))
-        G_tr.add_edges_from((u, v, G.edges[u, v]) for u, v in G_tr.edges)
+        if threshold == 1:
+            G_tr = nx.transitive_reduction(G)
+            # need to copy data for nodes and edges manually
+            G_tr.add_nodes_from(G.nodes(data=True))
+            G_tr.add_edges_from((u, v, G.edges[u, v]) for u, v in G_tr.edges)
+            G = G_tr
 
         K = graphviz.Digraph()
         K.attr(
@@ -268,9 +263,10 @@ class FlatTableAnalysis:
         # g.attr('edge', fontname='Helvetica')
         for col in self.df:
             K.node(wrap_text(col))
-        for L, R, data in G_tr.edges(data=True):
+        for L, R, data in G.edges(data=True):
             K.edge(wrap_text(L), wrap_text(R), label=str(data["weight"]))
-        return K.unflatten(stagger=3, fanout=True, chain=5)
+        K = K.unflatten(stagger=3, fanout=True, chain=5)
+        return K, G
 
     def get_density_table(self) -> pd.DataFrame:
         r"""
