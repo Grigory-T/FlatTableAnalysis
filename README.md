@@ -1,5 +1,3 @@
-
-
 ```python
 !pip install flattableanalysis
 from flattableanalysis.flat_table_analysis import FlatTableAnalysis
