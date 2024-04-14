@@ -70,6 +70,9 @@ class FlatTableAnalysis:
         if remove_one_one_relations:
             self.df = self._delete_one_one_relations(self.df)
 
+        if self.df.empty:
+            raise Exception("removed all columns during preprocessing")
+
         self._make_header_info()  # store info befor factorize erase it
 
         # final processing
@@ -228,7 +231,7 @@ class FlatTableAnalysis:
     def show_fd_graph(
         self,
         threshold: Optional[Union[float, int]] = 1,
-    ) -> graphviz.Digraph:
+    ) -> Union[graphviz.Digraph, nx.classes.digraph.DiGraph]:
         r"""
         draw graph with functional dependancies (fds) as edges (between each pair of columns)
         fds may be not strict (threshold level)
@@ -514,13 +517,13 @@ class FlatTableAnalysis:
                 for col_num in range(1, max_cols + 1)
             )
         )
-        total = self.df.shape[0]
+
         determinants = []
         for col_num in range(1, max_cols + 1):
             for source in it.combinations(other_cols, r=col_num):
                 subdf = self.df.loc[:, source + target].drop_duplicates()
-                dups_n = sum(~subdf.loc[:, source].duplicated(keep=False))
-                frac = dups_n / total
+                unique_n = sum(~subdf.loc[:, source].duplicated(keep=False))
+                frac = unique_n / subdf.shape[0]
                 source_set = set(source)
 
                 flag = True

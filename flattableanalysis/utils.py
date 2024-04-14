@@ -12,6 +12,7 @@ def wrap_text(s, max_width: int = 10) -> str:
     """
     return "\n".join(textwrap.wrap(s, max_width))
 
+
 def powerset(n: int, i_max=None) -> int:
     r"""
     empty set not included, full set is included
@@ -24,10 +25,8 @@ def powerset(n: int, i_max=None) -> int:
         rv += math.comb(n, i)
     return rv
 
-def cut_strings(
-                list_of_strings: Iterable[str],
-                threshold: int=19
-                ) -> Iterable[str]:
+
+def cut_strings(list_of_strings: Iterable[str], threshold: int = 19) -> Iterable[str]:
     r"""
     take list of strings
     cut them to minimal length that ensure uniqueness
@@ -35,14 +34,14 @@ def cut_strings(
     if len(list_of_strings) != (len(set(list_of_strings))):
         raise ValueError("list_of_strings must be unique")
 
-    pat = re.compile(f'[{string.punctuation + string.whitespace}]+')
+    pat = re.compile(f"[{string.punctuation + string.whitespace}]+")
     list_of_strings = [pat.sub("_", l) for l in list_of_strings]
     list_of_strings = make_unique(list_of_strings)
 
     max_string_len = max(map(len, list_of_strings))
 
     for i in range(max_string_len):
-        cut_strings_set = set(string_[: i+1] for string_ in list_of_strings)
+        cut_strings_set = set(string_[: i + 1] for string_ in list_of_strings)
         if len(cut_strings_set) == len(list_of_strings):
             min_idx = i
             break
@@ -51,7 +50,8 @@ def cut_strings(
     result_list = [string_[: min_idx + 1] for string_ in list_of_strings]
     return result_list
 
-def make_unique(list_of_el: Iterable[Union[str, int]]):
+
+def make_unique(list_of_el: Iterable[Union[str, int]]) -> pd.core.series.Series:
     r"""
     take iterable of elements
     if there are duplicates - add consecutive numbering to them
@@ -59,11 +59,15 @@ def make_unique(list_of_el: Iterable[Union[str, int]]):
     """
     list_of_el = [str(el) for el in list_of_el]
     return (
-        pd.DataFrame(list_of_el, columns=['input_string'])
-        .assign(string_cumcount = lambda df: df.groupby('input_string').agg('cumcount'))
-        .assign(duplicated_string = lambda df: df['input_string'].duplicated(keep=False))
-        .apply(lambda el:
-               el['input_string'] + '_' + str(el['string_cumcount']) if el['duplicated_string']
-                                                                     else el['input_string'],
-                                                                     axis=1)
+        pd.DataFrame(list_of_el, columns=["input_string"])
+        .assign(string_cumcount=lambda df: df.groupby("input_string").agg("cumcount"))
+        .assign(duplicated_string=lambda df: df["input_string"].duplicated(keep=False))
+        .apply(
+            lambda el: (
+                el["input_string"] + "_" + str(el["string_cumcount"])
+                if el["duplicated_string"]
+                else el["input_string"]
+            ),
+            axis=1,
+        )
     )
