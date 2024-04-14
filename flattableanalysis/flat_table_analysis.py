@@ -2,11 +2,9 @@ import numpy as np
 import pandas as pd
 
 import itertools as it
-import more_itertools as mit
 
 import networkx as nx
 import graphviz
-import igraph as ig
 
 import math
 from collections.abc import Iterable
@@ -25,9 +23,9 @@ class FlatTableAnalysis:
     def __init__(
         self,
         df: pd.DataFrame,
-        remove_constant_columns: bool=True,
-        remove_all_unique_columns: bool=True,
-        remove_one_one_relations: bool=True,
+        remove_constant_columns: bool = True,
+        remove_all_unique_columns: bool = True,
+        remove_one_one_relations: bool = True,
     ) -> None:
         r"""
         check df for basic validity
@@ -44,11 +42,10 @@ class FlatTableAnalysis:
             raise ValueError("DataFrame columns must not contain NaN values")
 
         self.df = (
-                    df
-                    .replace(["None", "none", "nan", ""], [np.nan] * 4)
-                    .fillna(np.nan)
-                    .rename(str, axis=1)
-                    .reset_index(drop=True)
+            df.replace(["None", "none", "nan", ""], [np.nan] * 4)
+            .fillna(np.nan)
+            .rename(str, axis=1)
+            .reset_index(drop=True)
         )
 
         # utils mappings
@@ -59,29 +56,35 @@ class FlatTableAnalysis:
 
         # remove columns
         if remove_constant_columns:
-            to_delete = list(self.df.columns[self.df.columns.map(self.col_to_unique) == 1])
+            to_delete = list(
+                self.df.columns[self.df.columns.map(self.col_to_unique) == 1]
+            )
             self.df = self.df.loc[:, lambda df: df.columns.difference(to_delete)]
             print("remove_constant_columns: ", to_delete)
         if remove_all_unique_columns:
-            to_delete = list(self.df.columns[self.df.columns.map(self.col_to_unique) == df.shape[0]])
+            to_delete = list(
+                self.df.columns[self.df.columns.map(self.col_to_unique) == df.shape[0]]
+            )
             self.df = self.df.loc[:, lambda df: df.columns.difference(to_delete)]
             print("remove_all_unique_columns: ", to_delete)
         if remove_one_one_relations:
             self.df = self._delete_one_one_relations(self.df)
 
         self._make_header_info()  # store info befor factorize erase it
-        
+
         # final processing
         self.df = (
-                    self.df.drop_duplicates()
-                    .apply(lambda ser: ser.factorize()[0])  # sentinel -1 will be used for NaN values
-                    .pipe(lambda obj: obj if isinstance(obj, pd.DataFrame) else obj.to_frame())
-                    .assign(
-                                **{
-                                    col: lambda df, col=col: df[col].astype("category")
-                                    for col in self.df
-                                }
-                    )
+            self.df.drop_duplicates()
+            .apply(
+                lambda ser: ser.factorize()[0]
+            )  # sentinel -1 will be used for NaN values
+            .pipe(lambda obj: obj if isinstance(obj, pd.DataFrame) else obj.to_frame())
+            .assign(
+                **{
+                    col: lambda df, col=col: df[col].astype("category")
+                    for col in self.df
+                }
+            )
         )
 
     def _delete_one_one_relations(
@@ -102,7 +105,7 @@ class FlatTableAnalysis:
             ):
                 edge_list.append(cols)
 
-        # if e.g. 4 cols have one-to-one relations between them -> need do delete all but one from them
+        # e.g. 4 cols have one-to-one relations between them -> we delete all but one
         G = nx.Graph()
         G.add_edges_from(edge_list)
         ccs = [sorted(cc, key=self.col_pos) for cc in nx.connected_components(G)]
@@ -110,7 +113,10 @@ class FlatTableAnalysis:
         to_delete = list(it.chain.from_iterable(to_delete))
         if to_delete:
             print("remove_one_one_relations: ", to_delete)
-            print("    found these sets of one-one relations, keep only 1st item from each: ", ccs)
+            print(
+                "    found these sets of one-one relations, keep only 1st item from each: ",
+                ccs,
+            )
             return df.drop(to_delete, axis=1)
         else:
             return df
@@ -122,21 +128,21 @@ class FlatTableAnalysis:
         col_name_width = min(max(len(c) for c in self.df) + 5, 35)
         self.header_info = {}
         d = {}
-        d['idx'] = 'idx'.ljust(5)
-        d['col name'] = 'col name'.ljust(col_name_width)
-        d['unique count'] = 'unique count'.ljust(15)
-        d['nan count'] = 'nan count'.ljust(15)
-        d['dtype'] = 'dtype'.ljust(15)
-        d['examples'] = 'examples'.ljust(15)
-        self.header_info['header'] = d   
+        d["idx"] = "idx".ljust(5)
+        d["col name"] = "col name".ljust(col_name_width)
+        d["unique count"] = "unique count".ljust(15)
+        d["nan count"] = "nan count".ljust(15)
+        d["dtype"] = "dtype".ljust(15)
+        d["examples"] = "examples".ljust(15)
+        self.header_info["header"] = d
         for idx, col in enumerate(self.df):
             d = {}
-            d['idx'] = f'{idx:<5}'
-            d['col name'] = col[:col_name_width-3].ljust(col_name_width)
-            d['unique count'] = f'{self.col_to_unique(col):<15_}'
-            d['nan count'] = f'{sum(self.df[col].isna()):<15_}'
-            d['dtype'] = str(self.df[col].dtype).ljust(15)
-            d['examples'] = str(list(self.df[col].dropna().unique()[:5]))[:70]
+            d["idx"] = f"{idx:<5}"
+            d["col name"] = col[: col_name_width - 3].ljust(col_name_width)
+            d["unique count"] = f"{self.col_to_unique(col):<15_}"
+            d["nan count"] = f"{sum(self.df[col].isna()):<15_}"
+            d["dtype"] = str(self.df[col].dtype).ljust(15)
+            d["examples"] = str(list(self.df[col].dropna().unique()[:5]))[:70]
             self.header_info[col] = d
 
     def show_header_info(self) -> None:
@@ -145,12 +151,12 @@ class FlatTableAnalysis:
         """
         for _, header_info in self.header_info.items():
             print(
-                header_info['idx'],
-                header_info['col name'],
-                header_info['unique count'],
-                header_info['nan count'],
-                header_info['dtype'],
-                header_info['examples'],
+                header_info["idx"],
+                header_info["col name"],
+                header_info["unique count"],
+                header_info["nan count"],
+                header_info["dtype"],
+                header_info["examples"],
             )
         print(f"total rows: {self.df.shape[0]:_}")
 
@@ -163,11 +169,18 @@ class FlatTableAnalysis:
         sort them to show bigger cardinality and smaller sets of cols
         """
         if col_nums > self.df.shape[1]:
-            raise ValueError("number of columns specified is larger than the number of DataFrame columns")
+            raise ValueError(
+                "number of columns specified is larger than the number of DataFrame columns"
+            )
         if col_nums <= 0:
             raise ValueError("number of columns must be greater than 0")
 
-        pbar = tqdm(total=sum(math.comb(self.df.shape[1], col_num) for col_num in range(1, col_nums+1)))
+        pbar = tqdm(
+            total=sum(
+                math.comb(self.df.shape[1], col_num)
+                for col_num in range(1, col_nums + 1)
+            )
+        )
         candidates = []
         for col_num in range(1, col_nums + 1):
             for col_names in it.combinations(self.df, r=col_num):
@@ -187,18 +200,29 @@ class FlatTableAnalysis:
 
         return (
             pd.DataFrame(candidates, columns=["col_names", "uniques"])
-            .assign(col_names = lambda df: df["col_names"].map(
-                        lambda el: tuple(sorted(el, key=self.col_pos))))
+            .assign(
+                col_names=lambda df: df["col_names"].map(
+                    lambda el: tuple(sorted(el, key=self.col_pos))
+                )
+            )
             .assign(total_rows=self.df.shape[0])
-            .assign(col_names_len = lambda df: df["col_names"].str.len())
+            .assign(col_names_len=lambda df: df["col_names"].str.len())
             .assign(uniques_frac=lambda df: df["uniques"] / df["total_rows"])
-            .assign(col_names_pos = lambda df: 
-                    df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
-                    )
-            .sort_values(["uniques_frac", "col_names_len", 'col_names_pos'], ascending=[False, True, True])
-            .drop('col_names_pos', axis=1)
+            .assign(
+                col_names_pos=lambda df: df["col_names"].map(
+                    lambda el: tuple(map(self.col_pos, el))
+                )  # for sorting only
+            )
+            .sort_values(
+                ["uniques_frac", "col_names_len", "col_names_pos"],
+                ascending=[False, True, True],
+            )
+            .drop("col_names_pos", axis=1)
             .reset_index(drop=True)
-            .loc[:, ['col_names', 'col_names_len', 'uniques', 'total_rows', 'uniques_frac']]
+            .loc[
+                :,
+                ["col_names", "col_names_len", "uniques", "total_rows", "uniques_frac"],
+            ]
         )
 
     def show_fd_graph(
@@ -209,7 +233,7 @@ class FlatTableAnalysis:
         draw graph with functional dependancies (fds) as edges (between each pair of columns)
         fds may be not strict (threshold level)
         """
-        if not (0 < threshold <= 1):
+        if not 0 < threshold <= 1:
             raise ValueError("Threshold should be in the left-open interval (0, 1]")
 
         table = []
@@ -244,22 +268,23 @@ class FlatTableAnalysis:
 
         K = graphviz.Digraph()
         K.attr(
-                nodesep='.3', 
-                ranksep='.3', 
-                # size='8.5', 
-                # ration='1',
-                rankdir='TB', 
-                # ordering='out', 
-                # splines='polyline', 
-                bgcolor='antiquewhite', 
-                fontsize='10',
-                )
-        K.attr('node', 
-               shape='box', 
-               style='filled', 
-               color='lightblue2', 
+            nodesep=".3",
+            ranksep=".3",
+            # size='8.5',
+            # ration='1',
+            rankdir="TB",
+            # ordering='out',
+            # splines='polyline',
+            bgcolor="antiquewhite",
+            fontsize="10",
+        )
+        K.attr(
+            "node",
+            shape="box",
+            style="filled",
+            color="lightblue2",
             #    fontname='Helvetica',
-               )
+        )
         # g.attr('edge', fontname='Helvetica')
         for col in self.df:
             K.node(wrap_text(col))
@@ -297,7 +322,7 @@ class FlatTableAnalysis:
         self,
         L: Optional[Union[str, Iterable[str]]] = None,
         R: Optional[Union[str, Iterable[str]]] = None,
-        level: int=1,
+        level: int = 1,
     ) -> None:
         r"""
         deep analysis of pair
@@ -310,21 +335,24 @@ class FlatTableAnalysis:
         R = R or self.df.columns[1]
         L = [L] if isinstance(L, str) else list(L)
         R = [R] if isinstance(R, str) else list(R)
-        
+
         subdf = self.df.loc[:, L + R].drop_duplicates()
         total = subdf.shape[0]
         L_one_nodes = sum(~subdf.loc[:, L].duplicated(keep=False))
         R_one_nodes = sum(~subdf.loc[:, R].duplicated(keep=False))
-        L_nodes = sum(~subdf.loc[:, L].duplicated(keep='first'))
-        R_nodes = sum(~subdf.loc[:, R].duplicated(keep='first'))
+        L_nodes = sum(~subdf.loc[:, L].duplicated(keep="first"))
+        R_nodes = sum(~subdf.loc[:, R].duplicated(keep="first"))
         LR_frac_edges = L_one_nodes / total
         RL_frac_edges = R_one_nodes / total
         LR_frac_nodes = L_one_nodes / L_nodes
         RL_frac_nodes = R_one_nodes / R_nodes
-        print(f'left unique {L_nodes:_}, right unique {R_nodes:_}, edges {total:_} ({total / (L_nodes * R_nodes):.5f}%)')
-        print(f'nodes: left fd -> {LR_frac_nodes:.5f}, right fd -> {RL_frac_nodes:.5f}')
-        print(f'edges: left fd -> {LR_frac_edges:.5f}, right fd -> {RL_frac_edges:.5f}')
-        if level == 1: return
+        print(
+            f"left unique {L_nodes:_}, right unique {R_nodes:_}, edges {total:_} ({total / (L_nodes * R_nodes):.5f}%)"
+        )
+        print(f"nodes: left fd -> {LR_frac_nodes:.5f}, right fd -> {RL_frac_nodes:.5f}")
+        print(f"edges: left fd -> {LR_frac_edges:.5f}, right fd -> {RL_frac_edges:.5f}")
+        if level == 1:
+            return
 
         G = nx.Graph()
         L_list = self.df.loc[:, L].values.tolist()
@@ -350,9 +378,15 @@ class FlatTableAnalysis:
             elif L_count == 1 and R_count == 1:
                 CC_type["one_one"] += 1
 
-        result = pd.Series(CC_type).reset_index().set_axis(["CC_type", "count"], axis=1).sort_values('CC_type')
+        result = (
+            pd.Series(CC_type)
+            .reset_index()
+            .set_axis(["CC_type", "count"], axis=1)
+            .sort_values("CC_type")
+        )
         display(result)
-        if level == 2: return
+        if level == 2:
+            return
 
         CC_all = (
             sorted(CC_all, key=lambda el: el[0], reverse=True)[:20]
@@ -363,7 +397,9 @@ class FlatTableAnalysis:
 
         zero_symbol = -1
         try:
-            L_nan_cc = nx.node_connected_component(G, tuple([0] + [zero_symbol] * len(L)))
+            L_nan_cc = nx.node_connected_component(
+                G, tuple([0] + [zero_symbol] * len(L))
+            )
         except KeyError:
             L_nan_cc = []
         cc_flag = [node[0] for node in L_nan_cc]
@@ -371,7 +407,9 @@ class FlatTableAnalysis:
         L_nan_R_count = cc_flag.count(1)
 
         try:
-            R_nan_cc = nx.node_connected_component(G, tuple([1] + [zero_symbol] * len(R)))
+            R_nan_cc = nx.node_connected_component(
+                G, tuple([1] + [zero_symbol] * len(R))
+            )
         except KeyError:
             R_nan_cc = []
         cc_flag = [node[0] for node in R_nan_cc]
@@ -390,12 +428,10 @@ class FlatTableAnalysis:
                 L_nan_cc == R_nan_cc,
             )
         )
-        if level == 3: return
+        if level == 3:
+            return
 
-    def fds(
-        self,
-        data: Iterable[Iterable[Iterable[str]]]
-    ) -> List[Tuple[bool, bool]]:
+    def fds(self, data: Iterable[Iterable[Iterable[str]]]) -> List[Tuple[bool, bool]]:
         """
         take list of pairs. Each pair include left columns set and right columns set
         determine if fd exists (left->right and right->left)
@@ -403,13 +439,13 @@ class FlatTableAnalysis:
         """
         rv = []
         for L, R in tqdm(data):
-            subdf = self.df.loc[:, L+R].drop_duplicates()
+            subdf = self.df.loc[:, L + R].drop_duplicates()
             rv.append(
-                        (
-                        any(subdf.loc[:, L].duplicated()),
-                        any(subdf.loc[:, R].duplicated()),
-                        )
-                      )
+                (
+                    any(subdf.loc[:, L].duplicated()),
+                    any(subdf.loc[:, R].duplicated()),
+                )
+            )
         return rv
 
     def show_opposite_count(
@@ -463,14 +499,21 @@ class FlatTableAnalysis:
         target = target or [self.df.columns[0]]
         target = (str(target),) if isinstance(target, (int, str)) else tuple(target)
 
-        if  max_cols + len(target) > self.df.shape[1]:
-            raise ValueError("Maximum number of columns specified is larger than the number of available DataFrame columns")
+        if max_cols + len(target) > self.df.shape[1]:
+            raise ValueError(
+                "Maximum number of columns specified is larger than the number of available DataFrame columns"
+            )
         if max_cols <= 0:
             raise ValueError("Minimum number of columns must be greater than 0")
 
         other_cols = list(self.df.columns.difference(target))
 
-        pbar = tqdm(total=sum(math.comb(len(other_cols), col_num) for col_num in range(1, max_cols + 1)))
+        pbar = tqdm(
+            total=sum(
+                math.comb(len(other_cols), col_num)
+                for col_num in range(1, max_cols + 1)
+            )
+        )
         total = self.df.shape[0]
         determinants = []
         for col_num in range(1, max_cols + 1):
@@ -492,15 +535,23 @@ class FlatTableAnalysis:
         pbar.close()
 
         return (
-                pd.DataFrame(determinants, columns=["col_names", "frac"])
-                .assign(col_names = lambda df: df["col_names"].map(
-                                lambda el: tuple(sorted(el, key=self.col_pos))))
-                .assign(col_names_len = lambda df: df['col_names'].str.len())
-                .loc[:, ['col_names', 'col_names_len', 'frac']]
-                .assign(col_names_pos = lambda df: 
-                        df['col_names'].map(lambda el: tuple(map(self.col_pos, el)))  # for sorting only
-                        )
-                .sort_values(["frac", 'col_names_len', 'col_names_pos'], ascending=[False, True, True])
-                .drop('col_names_pos', axis=1)
-                .reset_index(drop=True)
+            pd.DataFrame(determinants, columns=["col_names", "frac"])
+            .assign(
+                col_names=lambda df: df["col_names"].map(
+                    lambda el: tuple(sorted(el, key=self.col_pos))
+                )
+            )
+            .assign(col_names_len=lambda df: df["col_names"].str.len())
+            .loc[:, ["col_names", "col_names_len", "frac"]]
+            .assign(
+                col_names_pos=lambda df: df["col_names"].map(
+                    lambda el: tuple(map(self.col_pos, el))
+                )  # for sorting only
+            )
+            .sort_values(
+                ["frac", "col_names_len", "col_names_pos"],
+                ascending=[False, True, True],
+            )
+            .drop("col_names_pos", axis=1)
+            .reset_index(drop=True)
         )
