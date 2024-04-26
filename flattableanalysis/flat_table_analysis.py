@@ -290,9 +290,10 @@ class FlatTableAnalysis:
         )
         # g.attr('edge', fontname='Helvetica')
         for col in self.df:
-            K.node(wrap_text(col))
+            K.node(wrap_text(col).replace(':', '_'))
         for L, R, data in G.edges(data=True):
-            K.edge(wrap_text(L), wrap_text(R), label=str(data["weight"]))
+            K.edge(wrap_text(L).replace(':', '_'), wrap_text(R).replace(':', '_'), 
+                   label=str(data["weight"]))
         K = K.unflatten(stagger=3, fanout=True, chain=5)
         return K, G
 
