@@ -256,9 +256,9 @@ class FlatTableAnalysis:
         edge_list = []
         for _, (col_L, col_R, *__, frac_L, frac_R) in table.iterrows():
             if frac_L >= threshold:
-                edge_list.append((col_L, col_R, {"weight": round(frac_L, 2)}))
+                edge_list.append((col_L, col_R, {"weight": frac_L}))
             if frac_R >= threshold:
-                edge_list.append((col_R, col_L, {"weight": round(frac_R, 2)}))
+                edge_list.append((col_R, col_L, {"weight": frac_R}))
 
         G = nx.DiGraph()
         G.add_edges_from(edge_list)
@@ -351,10 +351,10 @@ class FlatTableAnalysis:
         LR_frac_nodes = L_one_nodes / L_nodes
         RL_frac_nodes = R_one_nodes / R_nodes
         print(
-            f"left unique {L_nodes:_}, right unique {R_nodes:_}, edges {total:_} ({total / (L_nodes * R_nodes):.5f}%)"
+            f"left unique {L_nodes:_}, right unique {R_nodes:_}, edges {total:_} ({total / (L_nodes * R_nodes)}%)"
         )
-        print(f"nodes: left fd -> {LR_frac_nodes:.5f}, right fd -> {RL_frac_nodes:.5f}")
-        print(f"edges: left fd -> {LR_frac_edges:.5f}, right fd -> {RL_frac_edges:.5f}")
+        print(f"nodes: left fd -> {LR_frac_nodes}, right fd -> {RL_frac_nodes}")
+        print(f"edges: left fd -> {LR_frac_edges}, right fd -> {RL_frac_edges}")
         if level == 1:
             return
 
